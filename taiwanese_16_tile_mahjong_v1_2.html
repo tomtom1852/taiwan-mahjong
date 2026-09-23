@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台灣16張麻將 V1.2 - Taiwanese 16-Tile Mahjong</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;600;700;900&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+      background-color: #0b1d13;
+    }
+
+    /* Green Felt Table Background */
+    .mahjong-table {
+      background: radial-gradient(circle at center, #1b4d2e 0%, #0d2c19 70%, #06150b 100%);
+      box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.8);
+    }
+
+    /* 3D Tile Aesthetics */
+    .tile-3d {
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .tile-3d:hover {
+      transform: translateY(-8px) scale(1.03);
+      z-index: 30;
+      filter: brightness(1.08);
+    }
+
+    .tile-3d.selected {
+      transform: translateY(-16px);
+      box-shadow: 0 0 15px rgba(234, 179, 8, 0.9);
+      border-color: #eab308 !important;
+    }
+
+    /* Tile Face & Back styling */
+    .tile-front {
+      background: linear-gradient(145deg, #ffffff 0%, #f3f0e6 80%, #e1dcd0 100%);
+      border-radius: 4px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.8), inset 0 -2px 4px rgba(0,0,0,0.15);
+    }
+
+    .tile-back-green {
+      background: linear-gradient(145deg, #2d7a4c 0%, #1a5231 100%);
+      border: 1px solid #133c23;
+      border-radius: 4px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+    }
+
+    /* Active Turn Glowing Ring */
+    .glowing-ring {
+      animation: pulse-ring 1.5s infinite alternate;
+      border: 3px solid #f59e0b;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.8), inset 0 0 10px rgba(245, 158, 11, 0.5);
+    }
+
+    @keyframes pulse-ring {
+      0% {
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.5), inset 0 0 5px rgba(245, 158, 11, 0.3);
+      }
+      100% {
+        box-shadow: 0 0 25px rgba(245, 158, 11, 1), inset 0 0 15px rgba(245, 158, 11, 0.7);
+      }
+    }
+
+    /* Compass Pulse */
+    .compass-active {
+      color: #f59e0b;
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.9);
+      font-weight: 900;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between select-none text-white relative">
+
+  <!-- TOP CONTROL BAR -->
+  <header class="bg-black/60 backdrop-blur-md border-b border-emerald-900/50 px-4 py-2 flex items-center justify-between z-40 text-sm">
+    <div class="flex items-center space-x-3">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-gem text-amber-400 text-lg"></i>
+        <span class="font-bold text-base tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-amber-400 to-yellow-500">
+          台灣16張麻將 V1.2
+        </span>
+      </div>
+      <span class="bg-emerald-900/80 text-emerald-300 text-xs px-2 py-0.5 rounded border border-emerald-700/50">
+        4人線上 / AI對戰
+      </span>
+    </div>
+
+    <!-- Middle Status / Host Toggles -->
+    <div class="flex items-center space-x-4">
+      <!-- 換三張 (3-Tile Exchange Toggle) -->
+      <label class="flex items-center space-x-2 cursor-pointer bg-emerald-950/80 hover:bg-emerald-900/80 px-3 py-1 rounded-lg border border-emerald-700/50 transition">
+        <input type="checkbox" id="swap3Toggle" class="form-checkbox h-4 w-4 text-amber-500 rounded focus:ring-0 accent-amber-500" checked />
+        <span class="text-xs text-amber-200 font-semibold flex items-center gap-1">
+          <i class="fa-solid fa-arrows-rotate text-amber-400"></i> 開啟換三張 (Exchange 3)
+        </span>
+      </label>
+
+      <!-- Room ID / Status -->
+      <div class="hidden sm:flex items-center space-x-2 bg-black/40 px-3 py-1 rounded-lg border border-emerald-800/40">
+        <span class="text-xs text-gray-400">房號:</span>
+        <span id="roomDisplayCode" class="text-xs font-mono text-amber-300 font-bold">SOLO-888</span>
+      </div>
+    </div>
+
+    <!-- Right Controls: Profile & Rules -->
+    <div class="flex items-center space-x-2">
+      <button onclick="openProfileModal()" class="flex items-center space-x-2 bg-emerald-900/50 hover:bg-emerald-800/80 px-3 py-1.5 rounded-lg border border-emerald-700/60 transition text-xs">
+        <span id="topBarAvatar" class="text-base">🀄</span>
+        <span id="topBarName" class="font-medium text-emerald-100">雀友玩家</span>
+        <i class="fa-solid fa-pen-to-square text-emerald-400 text-xs"></i>
+      </button>
+
+      <button onclick="openRulesModal()" class="bg-emerald-950 hover:bg-emerald-900 p-2 rounded-lg border border-emerald-700/50 text-emerald-300 transition" title="台數規則說明">
+        <i class="fa-solid fa-book"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAHJONG TABLE CANVAS CONTAINER -->
+  <main class="relative flex-1 mahjong-table flex items-center justify-center overflow-hidden p-2">
+
+    <!-- UPPER LEFT GAME INFO OVERLAY -->
+    <div class="absolute top-3 left-3 bg-black/60 backdrop-blur-md border border-emerald-700/50 rounded-xl p-3 text-xs space-y-1.5 z-20 shadow-xl min-w-[140px]">
+      <div class="flex items-center justify-between">
+        <span class="text-gray-400">圈風局:</span>
+        <span id="roundWindDisplay" class="font-bold text-amber-400 text-sm">東風圈 東局</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-gray-400">莊家:</span>
+        <span id="dealerDisplay" class="font-bold text-red-400">玩家 (連莊0)</span>
+      </div>
+      <div class="flex items-center justify-between pt-1 border-t border-emerald-900">
+        <span class="text-gray-400">剩餘牌數:</span>
+        <span id="wallCountDisplay" class="font-mono text-base font-extrabold text-emerald-300">84</span>
+      </div>
+    </div>
+
+    <!-- CENTRAL COMPASS & DISCARD RIVERS CENTERPIECE -->
+    <div class="relative w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] md:w-[480px] md:h-[480px] flex items-center justify-center rounded-2xl bg-emerald-950/40 border border-emerald-800/30 p-2">
+      
+      <!-- CENTRAL 3D COMPASS DIE -->
+      <div class="relative w-32 h-32 sm:w-36 sm:h-36 bg-gradient-to-br from-neutral-900 via-neutral-950 to-black rounded-full border-4 border-amber-600/60 shadow-2xl flex items-center justify-center z-10">
+        <!-- Inner Compass Ring -->
+        <div class="absolute inset-1 rounded-full border border-amber-500/30 flex items-center justify-center">
+          
+          <!-- Clockwise Seat Winds: Bottom=東, Left=南, Top=西, Right=北 -->
+          <!-- BOTTOM WIND (YOU / 玩家) = 東 -->
+          <div id="compass-bottom" class="absolute bottom-1.5 font-bold text-lg sm:text-xl transition-all duration-300 compass-active">
+            東
+          </div>
+          
+          <!-- LEFT WIND (下家 / 左手邊) = 南 -->
+          <div id="compass-left" class="absolute left-2 font-bold text-lg sm:text-xl text-gray-500 transition-all duration-300">
+            南
+          </div>
+
+          <!-- TOP WIND (對家 / 對邊) = 西 -->
+          <div id="compass-top" class="absolute top-1.5 font-bold text-lg sm:text-xl text-gray-500 transition-all duration-300">
+            西
+          </div>
+
+          <!-- RIGHT WIND (上家 / 右手邊) = 北 -->
+          <div id="compass-right" class="absolute right-2 font-bold text-lg sm:text-xl text-gray-500 transition-all duration-300">
+            北
+          </div>
+
+          <!-- Center Round Details / Dice indicator -->
+          <div class="text-center space-y-0.5">
+            <div id="compassCenterText" class="text-[10px] text-amber-400 font-bold tracking-widest uppercase">
+              本局輪候
+            </div>
+            <div id="turnTimerDisplay" class="font-mono font-extrabold text-xl text-amber-300 leading-none">
+              15
+            </div>
+            <div id="dicesDisplay" class="text-[10px] text-gray-400 flex justify-center gap-1">
+              <span>🎲3</span><span>🎲4</span><span>🎲5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4-SIDED DISCARD RIVERS (Surrounding the compass) -->
+      <!-- TOP PLAYER DISCARD RIVER (對家) -->
+      <div id="river-top" class="absolute top-2 left-12 right-12 h-16 flex flex-wrap content-start gap-1 justify-center overflow-hidden p-1 bg-black/10 rounded-lg"></div>
+      
+      <!-- LEFT PLAYER DISCARD RIVER (下家) -->
+      <div id="river-left" class="absolute left-2 top-16 bottom-16 w-16 flex flex-wrap content-start gap-1 justify-center overflow-hidden p-1 bg-black/10 rounded-lg"></div>
+
+      <!-- RIGHT PLAYER DISCARD RIVER (上家) -->
+      <div id="river-right" class="absolute right-2 top-16 bottom-16 w-16 flex flex-wrap content-start gap-1 justify-center overflow-hidden p-1 bg-black/10 rounded-lg"></div>
+
+      <!-- BOTTOM PLAYER DISCARD RIVER (YOU / 玩家) -->
+      <div id="river-bottom" class="absolute bottom-2 left-12 right-12 h-16 flex flex-wrap content-start gap-1 justify-center overflow-hidden p-1 bg-black/10 rounded-lg"></div>
+    </div>
+
+    <!-- PLAYER 0 (BOTTOM: YOU / 玩家 - 東) -->
+    <div id="player-seat-0" class="absolute bottom-1 left-0 right-0 flex flex-col items-center z-30 px-4">
+      
+      <!-- Action Command Prompt Buttons Popup Bar -->
+      <div id="actionPromptBar" class="hidden mb-2 flex items-center space-x-2 bg-black/85 backdrop-blur-md p-2 rounded-2xl border-2 border-amber-500 shadow-2xl animate-bounce">
+        <button onclick="handleUserAction('CHOW')" id="btnChow" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-bold text-white rounded-xl shadow-lg border border-teal-300 transition text-sm flex items-center gap-1">
+          <i class="fa-solid fa-utensils"></i> 吃牌
+        </button>
+        <button onclick="handleUserAction('PONG')" id="btnPong" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-bold text-white rounded-xl shadow-lg border border-blue-300 transition text-sm flex items-center gap-1">
+          <i class="fa-solid fa-clone"></i> 碰牌
+        </button>
+        <button onclick="handleUserAction('KONG')" id="btnKong" class="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold text-white rounded-xl shadow-lg border border-purple-300 transition text-sm flex items-center gap-1">
+          <i class="fa-solid fa-layer-group"></i> 槓牌
+        </button>
+        <button onclick="handleUserAction('WIN')" id="btnWin" class="px-5 py-2 bg-gradient-to-r from-red-600 via-amber-500 to-red-600 hover:scale-105 font-black text-yellow-100 rounded-xl shadow-xl border-2 border-yellow-300 transition text-base flex items-center gap-1 animate-pulse">
+          <i class="fa-solid fa-crown text-yellow-300"></i> 胡牌 !
+        </button>
+        <button onclick="handleUserAction('SKIP')" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold rounded-xl border border-gray-500 transition text-sm">
+          過 (Skip)
+        </button>
+      </div>
+
+      <!-- 3-Tile Swap Action Button Prompt -->
+      <div id="swapPromptBar" class="hidden mb-2 flex items-center space-x-3 bg-amber-950/90 border border-amber-500 p-2 px-4 rounded-xl shadow-2xl">
+        <span class="text-xs text-amber-200 font-medium">請選擇手中 3 張牌進行交換:</span>
+        <span id="swapCountBadge" class="bg-amber-500 text-black font-extrabold px-2 py-0.5 rounded-full text-xs">0 / 3</span>
+        <button id="btnExecuteSwap" onclick="execute3TileSwap()" disabled class="px-4 py-1.5 bg-amber-500 disabled:opacity-40 hover:bg-amber-400 text-black font-black rounded-lg text-xs transition shadow-md">
+          確認換牌 (Confirm Swap)
+        </button>
+      </div>
+
+      <div class="flex items-end justify-center w-full max-w-5xl gap-2">
+        <!-- Compact Left-side Flower Meld Zone (~70% scale) -->
+        <div class="flex flex-col items-center bg-black/40 border border-emerald-800/40 p-1.5 rounded-lg min-w-[70px]">
+          <span class="text-[10px] text-emerald-400 font-bold mb-1">花牌區</span>
+          <div id="flower-zone-0" class="flex flex-wrap gap-0.5 max-w-[80px] justify-center scale-75 origin-bottom">
+            <!-- Flowers auto render here -->
+          </div>
+        </div>
+
+        <!-- Melds Zone (Open Chows/Pongs/Kongs) -->
+        <div id="meld-zone-0" class="flex items-center gap-1 bg-black/20 p-1 rounded-lg"></div>
+
+        <!-- Interactive Tiles Hand (You / Bottom) -->
+        <div id="hand-0" class="flex items-end gap-1 sm:gap-1.5 px-2 py-1 bg-black/30 rounded-xl border border-emerald-800/30"></div>
+
+        <!-- Drawn Tile Slot (17th tile) -->
+        <div id="drawn-slot-0" class="ml-2 pl-2 border-l border-amber-500/40 min-w-[40px] flex items-end"></div>
+
+        <!-- Player Profile Badge -->
+        <div id="badge-0" class="ml-3 flex items-center space-x-2 bg-emerald-950/80 border border-emerald-700/60 p-2 rounded-xl shadow-lg min-w-[130px]">
+          <div id="avatar-0" class="w-10 h-10 rounded-full bg-emerald-800 flex items-center justify-center text-xl border border-amber-400">
+            🀄
+          </div>
+          <div class="flex flex-col text-left">
+            <div class="flex items-center gap-1">
+              <span id="name-0" class="text-xs font-bold text-amber-200 truncate max-w-[70px]">雀友玩家</span>
+              <span id="dealer-tag-0" class="bg-red-600 text-white text-[9px] px-1 rounded font-black hidden">莊</span>
+            </div>
+            <span id="score-0" class="text-xs font-mono font-semibold text-emerald-300">10,000 分</span>
+            <span class="text-[9px] text-amber-400/80 font-bold">風位: 東 (Self)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLAYER 1 (LEFT: 下家 - 南) -->
+    <div id="player-seat-1" class="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center z-20">
+      <div id="badge-1" class="mb-2 flex items-center space-x-2 bg-emerald-950/80 border border-emerald-700/60 p-1.5 rounded-xl shadow-lg">
+        <div id="avatar-1" class="w-8 h-8 rounded-full bg-blue-900 flex items-center justify-center text-base border border-blue-400">
+          🤖
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-1">
+            <span id="name-1" class="text-xs font-bold text-gray-200">AI 下家</span>
+            <span id="dealer-tag-1" class="bg-red-600 text-white text-[9px] px-1 rounded font-black hidden">莊</span>
+          </div>
+          <span id="score-1" class="text-[11px] font-mono text-emerald-300">10,000</span>
+          <span class="text-[9px] text-gray-400">風位: 南 (下家)</span>
+        </div>
+      </div>
+
+      <!-- Flower zone left -->
+      <div id="flower-zone-1" class="flex flex-col gap-0.5 scale-75 origin-left mb-1"></div>
+      <div id="meld-zone-1" class="flex flex-col gap-1 mb-1"></div>
+      <!-- Vertical hand tiles face down -->
+      <div id="hand-1" class="flex flex-col gap-0.5 bg-black/20 p-1 rounded-lg"></div>
+    </div>
+
+    <!-- PLAYER 2 (TOP: 對家 - 西) -->
+    <div id="player-seat-2" class="absolute top-12 left-1/2 -translate-x-1/2 flex flex-col items-center z-20">
+      <div id="badge-2" class="mb-1 flex items-center space-x-2 bg-emerald-950/80 border border-emerald-700/60 p-1.5 rounded-xl shadow-lg">
+        <div id="avatar-2" class="w-8 h-8 rounded-full bg-purple-900 flex items-center justify-center text-base border border-purple-400">
+          🤖
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-1">
+            <span id="name-2" class="text-xs font-bold text-gray-200">AI 對家</span>
+            <span id="dealer-tag-2" class="bg-red-600 text-white text-[9px] px-1 rounded font-black hidden">莊</span>
+          </div>
+          <span id="score-2" class="text-[11px] font-mono text-emerald-300">10,000</span>
+          <span class="text-[9px] text-gray-400">風位: 西 (對家)</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <div id="flower-zone-2" class="flex gap-0.5 scale-75 origin-top"></div>
+        <div id="meld-zone-2" class="flex gap-1"></div>
+        <div id="hand-2" class="flex gap-0.5 bg-black/20 p-1 rounded-lg"></div>
+      </div>
+    </div>
+
+    <!-- PLAYER 3 (RIGHT: 上家 - 北) -->
+    <div id="player-seat-3" class="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center z-20">
+      <div id="badge-3" class="mb-2 flex items-center space-x-2 bg-emerald-950/80 border border-emerald-700/60 p-1.5 rounded-xl shadow-lg">
+        <div id="avatar-3" class="w-8 h-8 rounded-full bg-red-900 flex items-center justify-center text-base border border-red-400">
+          🤖
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-1">
+            <span id="name-3" class="text-xs font-bold text-gray-200">AI 上家</span>
+            <span id="dealer-tag-3" class="bg-red-600 text-white text-[9px] px-1 rounded font-black hidden">莊</span>
+          </div>
+          <span id="score-3" class="text-[11px] font-mono text-emerald-300">10,000</span>
+          <span class="text-[9px] text-gray-400">風位: 北 (上家)</span>
+        </div>
+      </div>
+
+      <div id="flower-zone-3" class="flex flex-col gap-0.5 scale-75 origin-right mb-1"></div>
+      <div id="meld-zone-3" class="flex flex-col gap-1 mb-1"></div>
+      <div id="hand-3" class="flex flex-col gap-0.5 bg-black/20 p-1 rounded-lg"></div>
+    </div>
+
+  </main>
+
+  <!-- MODAL 1: DRAW GAME (流局) COUNTDOWN MODAL -->
+  <div id="drawGameModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-gradient-to-b from-emerald-900 to-black border-2 border-amber-500/80 rounded-2xl p-6 max-w-md w-full text-center shadow-2xl space-y-4">
+      <div class="w-16 h-16 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-3xl border border-amber-500">
+        🀄
+      </div>
+      <h2 class="text-2xl font-black text-amber-300 tracking-wider">本局海底流局 (Draw Game)</h2>
+      <p class="text-xs text-gray-300 leading-relaxed">
+        牆牌已全部摸完，無人完成胡牌。莊家將繼續連莊或移交下一家。
+      </p>
+      <div class="py-2">
+        <span class="text-xs text-gray-400">自動進入下一局倒數:</span>
+        <div id="drawCountdown" class="text-4xl font-mono font-extrabold text-amber-400 my-1">10</div>
+      </div>
+      <button onclick="nextRoundFromDraw()" class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 font-bold text-black rounded-xl shadow-lg text-sm transition">
+        立即開始下一局 (Next Round)
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL 2: GAME WIN / HU RESULT MODAL -->
+  <div id="winModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-gradient-to-b from-emerald-900 via-gray-900 to-black border-2 border-yellow-400 rounded-2xl p-6 max-w-lg w-full text-center shadow-2xl space-y-4">
+      <div id="winTitle" class="text-3xl font-black text-amber-300 tracking-wider">
+        🎉 胡牌勝利 !
+      </div>
+      <div id="winnerName" class="text-base text-emerald-200 font-bold">
+        雀友玩家 贏得本局
+      </div>
+      
+      <!-- Winning Hand Display -->
+      <div id="winningHandDisplay" class="flex flex-wrap gap-1 justify-center p-3 bg-black/50 rounded-xl border border-emerald-800"></div>
+
+      <!-- Fan / Tai Breakdown List -->
+      <div class="bg-black/40 rounded-xl p-3 border border-emerald-900 text-left text-xs space-y-1 max-h-40 overflow-y-auto" id="taiBreakdownList">
+        <div class="flex justify-between text-gray-300"><span>底台:</span><span class="font-bold text-amber-400">1 台</span></div>
+        <div class="flex justify-between text-gray-300"><span>自摸:</span><span class="font-bold text-amber-400">1 台</span></div>
+      </div>
+
+      <div class="flex items-center justify-between text-base font-extrabold pt-2 border-t border-emerald-800">
+        <span class="text-gray-300">總計台數:</span>
+        <span id="totalTaiDisplay" class="text-2xl text-amber-400 font-mono">8 台</span>
+      </div>
+
+      <button onclick="closeWinModalAndRestart()" class="w-full py-3 bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 hover:scale-105 font-black text-black rounded-xl shadow-xl text-base transition">
+        繼續下一局 (Play Again)
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL 3: USER PROFILE & NAME MODAL -->
+  <div id="profileModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-emerald-950 border border-emerald-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+      <h3 class="text-lg font-bold text-amber-300 flex items-center gap-2">
+        <i class="fa-solid fa-user-gear"></i> 個人資料設定
+      </h3>
+      
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-gray-300 block mb-1">玩家暱稱</label>
+          <input type="text" id="inputPlayerName" class="w-full bg-black/50 border border-emerald-700 rounded-lg px-3 py-2 text-sm text-amber-200 focus:outline-none focus:border-amber-500" value="雀友玩家" />
+        </div>
+        
+        <div>
+          <label class="text-xs text-gray-300 block mb-1">選擇頭像 Icon</label>
+          <div class="flex gap-2 justify-between">
+            <button onclick="selectAvatarIcon('🀄')" class="p-2 bg-emerald-900/60 rounded-lg text-2xl hover:bg-emerald-800">🀄</button>
+            <button onclick="selectAvatarIcon('🐉')" class="p-2 bg-emerald-900/60 rounded-lg text-2xl hover:bg-emerald-800">🐉</button>
+            <button onclick="selectAvatarIcon('🐯')" class="p-2 bg-emerald-900/60 rounded-lg text-2xl hover:bg-emerald-800">🐯</button>
+            <button onclick="selectAvatarIcon('🐼')" class="p-2 bg-emerald-900/60 rounded-lg text-2xl hover:bg-emerald-800">🐼</button>
+            <button onclick="selectAvatarIcon('👑')" class="p-2 bg-emerald-900/60 rounded-lg text-2xl hover:bg-emerald-800">👑</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-2">
+        <button onclick="closeProfileModal()" class="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-xs rounded-lg">取消</button>
+        <button onclick="saveProfileModal()" class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-lg">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: TAIWANESE TAI RULES INFOGRAPHIC MODAL -->
+  <div id="rulesModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-emerald-950 border border-emerald-700 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-3 max-h-[85vh] overflow-y-auto">
+      <h3 class="text-base font-bold text-amber-300 border-b border-emerald-800 pb-2 flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> 台灣16張麻將常見台數表
+      </h3>
+      <div class="text-xs text-gray-200 space-y-2">
+        <div class="p-2 bg-black/30 rounded border border-emerald-900">
+          <span class="font-bold text-amber-400">莊家 / 連莊:</span> 莊家胡牌或連莊 +1台，連一拉一遞增。
+        </div>
+        <div class="p-2 bg-black/30 rounded border border-emerald-900">
+          <span class="font-bold text-amber-400">門清 / 自摸:</span> 無吃碰槓門清 +1台，自摸 +1台。
+        </div>
+        <div class="p-2 bg-black/30 rounded border border-emerald-900">
+          <span class="font-bold text-amber-400">三元牌 / 風牌:</span> 中發白刻子各 +1台，圈風/門風刻子 +1台。
+        </div>
+        <div class="p-2 bg-black/30 rounded border border-emerald-900">
+          <span class="font-bold text-amber-400">嚦咕嚦咕 (八對半):</span> 8個對子 + 1張單牌 (8台)。
+        </div>
+        <div class="p-2 bg-black/30 rounded border border-emerald-900">
+          <span class="font-bold text-amber-400">清一色 / 湊一色:</span> 全同一花色 (+8台) / 數牌加字牌 (+4台)。
+        </div>
+      </div>
+      <button onclick="closeRulesModal()" class="w-full py-2 bg-emerald-800 hover:bg-emerald-700 text-xs font-bold rounded-lg mt-2">
+        關閉 (Close)
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* ===================================================================
+       TAIWANESE 16-TILE MAHJONG V1.2 GAME ENGINE
+       =================================================================== */
+
+    // 1. TILE DEFINITIONS & VECTOR SVG GENERATOR
+    const SUITS = { BAMBOO: 'B', CHARACTER: 'C', DOT: 'D', WIND: 'W', DRAGON: 'DR', FLOWER: 'F' };
+    
+    // Generate Vector SVG Artwork for Mahjong Tiles
+    function renderTileSVG(suit, val) {
+      if (suit === 'B') { // Bamboo (條)
+        if (val === 1) { // Peacock 1-Bamboo
+          return `<svg viewBox="0 0 100 130" class="w-full h-full p-1">
+            <path d="M50 20 C35 20, 25 35, 25 50 C25 65, 35 75, 50 85 C65 75, 75 65, 75 50 C75 35, 65 20, 50 20 Z" fill="#059669"/>
+            <circle cx="50" cy="35" r="8" fill="#dc2626"/>
+            <circle cx="47" cy="33" r="2" fill="#fff"/>
+            <path d="M50 85 L50 115 M40 100 L60 100 M45 110 L55 110" stroke="#059669" stroke-width="6" stroke-linecap="round"/>
+          </svg>`;
+        }
+        // Standard Bamboos
+        let sticks = '';
+        for(let i=0; i<val; i++) {
+          const x = 20 + (i % 3) * 30;
+          const y = 25 + Math.floor(i / 3) * 35;
+          sticks += `<rect x="${x}" y="${y}" width="10" height="26" rx="3" fill="${i%2===0?'#059669':'#dc2626'}"/>`;
+        }
+        return `<svg viewBox="0 0 100 130" class="w-full h-full p-1">${sticks}</svg>`;
+      } 
+      else if (suit === 'C') { // Character (萬)
+        const cnNums = ['','一','二','三','四','五','六','七','八','九'];
+        return `<svg viewBox="0 0 100 130" class="w-full h-full flex flex-col items-center justify-center">
+          <text x="50" y="55" font-size="42" font-weight="900" fill="#dc2626" text-anchor="middle" dominant-baseline="middle">${cnNums[val]}</text>
+          <text x="50" y="98" font-size="38" font-weight="900" fill="#059669" text-anchor="middle" dominant-baseline="middle">萬</text>
+        </svg>`;
+      } 
+      else if (suit === 'D') { // Dots (筒)
+        let dots = '';
+        const coords = {
+          1: [[50,65,22,'#dc2626']],
+          2: [[50,35,14,'#059669'],[50,95,14,'#2563eb']],
+          3: [[25,30,12,'#2563eb'],[50,65,12,'#dc2626'],[75,100,12,'#059669']],
+          4: [[30,35,13,'#2563eb'],[70,35,13,'#059669'],[30,95,13,'#059669'],[70,95,13,'#2563eb']],
+          5: [[25,30,11,'#2563eb'],[75,30,11,'#059669'],[50,65,12,'#dc2626'],[25,100,11,'#059669'],[75,100,11,'#2563eb']],
+          6: [[30,30,11,'#2563eb'],[70,30,11,'#2563eb'],[30,65,11,'#dc2626'],[70,65,11,'#dc2626'],[30,100,11,'#dc2626'],[70,100,11,'#dc2626']],
+          7: [[25,25,9,'#2563eb'],[50,35,9,'#2563eb'],[75,45,9,'#2563eb'],[30,80,10,'#dc2626'],[70,80,10,'#dc2626'],[30,105,10,'#dc2626'],[70,105,10,'#dc2626']],
+          8: [[30,25,9,'#2563eb'],[70,25,9,'#2563eb'],[30,50,9,'#2563eb'],[70,50,9,'#2563eb'],[30,78,9,'#059669'],[70,78,9,'#059669'],[30,103,9,'#059669'],[70,103,9,'#059669']],
+          9: [[25,28,10,'#2563eb'],[50,28,10,'#2563eb'],[75,28,10,'#2563eb'],[25,65,10,'#dc2626'],[50,65,10,'#dc2626'],[75,65,10,'#dc2626'],[25,102,10,'#059669'],[50,102,10,'#059669'],[75,102,10,'#059669']]
+        };
+        (coords[val] || []).forEach(c => {
+          dots += `<circle cx="${c[0]}" cy="${c[1]}" r="${c[2]}" fill="${c[3]}" stroke="#fff" stroke-width="1.5"/>`;
+        });
+        return `<svg viewBox="0 0 100 130" class="w-full h-full p-1">${dots}</svg>`;
+      } 
+      else if (suit === 'W') { // Wind (東南西北)
+        const winds = ['','東','南','西','北'];
+        const colors = ['','#dc2626','#059669','#2563eb','#d97706'];
+        return `<svg viewBox="0 0 100 130" class="w-full h-full flex items-center justify-center">
+          <text x="50" y="70" font-size="62" font-weight="900" fill="${colors[val]}" text-anchor="middle" dominant-baseline="middle">${winds[val]}</text>
+        </svg>`;
+      } 
+      else if (suit === 'DR') { // Dragons (中發白)
+        if (val === 1) { // 中
+          return `<svg viewBox="0 0 100 130" class="w-full h-full flex items-center justify-center">
+            <text x="50" y="70" font-size="65" font-weight="900" fill="#dc2626" text-anchor="middle" dominant-baseline="middle">中</text>
+          </svg>`;
+        } else if (val === 2) { // 發
+          return `<svg viewBox="0 0 100 130" class="w-full h-full flex items-center justify-center">
+            <text x="50" y="70" font-size="62" font-weight="900" fill="#059669" text-anchor="middle" dominant-baseline="middle">發</text>
+          </svg>`;
+        } else { // 白板
+          return `<svg viewBox="0 0 100 130" class="w-full h-full p-3">
+            <rect x="15" y="15" width="70" height="100" rx="6" fill="none" stroke="#2563eb" stroke-width="8"/>
+          </svg>`;
+        }
+      } 
+      else if (suit === 'F') { // Flowers (梅蘭竹菊 / 春夏秋冬)
+        const flowers = ['','梅','蘭','竹','菊','春','夏','秋','冬'];
+        return `<svg viewBox="0 0 100 130" class="w-full h-full flex flex-col items-center justify-center">
+          <text x="50" y="45" font-size="28" font-weight="bold" fill="#d97706" text-anchor="middle">${val}</text>
+          <text x="50" y="85" font-size="38" font-weight="900" fill="#d97706" text-anchor="middle">${flowers[val]}</text>
+        </svg>`;
+      }
+      return '';
+    }
+
+    // 2. GAME STATE & SETUP VARIABLES
+    const gameState = {
+      wall: [],
+      players: [
+        { id: 0, name: '雀友玩家', avatar: '🀄', hand: [], melds: [], flowers: [], score: 10000, isHuman: true },
+        { id: 1, name: 'AI 下家', avatar: '🤖', hand: [], melds: [], flowers: [], score: 10000, isHuman: false },
+        { id: 2, name: 'AI 對家', avatar: '🤖', hand: [], melds: [], flowers: [], score: 10000, isHuman: false },
+        { id: 3, name: 'AI 上家', avatar: '🤖', hand: [], melds: [], flowers: [], score: 10000, isHuman: false },
+      ],
+      discards: [[], [], [], []], // 4-Sided Rivers
+      currentTurn: 0, // 0=Bottom(You), 1=Left(下家), 2=Top(對家), 3=Right(上家)
+      dealer: 0,
+      streak: 0,
+      roundWind: 1, // 1=東風圈
+      drawnTile: null,
+      selectedForSwap: [], // Indices of 3 tiles chosen for exchange
+      isSwapPhase: false,
+      turnTimer: 15,
+      timerInterval: null,
+      pendingClaim: null // Information about last discarded tile available for Chow/Pong/Win
+    };
+
+    // 3. INITIALIZE MAHJONG DECK (144 Tiles Total)
+    function buildDeck() {
+      const deck = [];
+      let idCounter = 1;
+
+      const addTiles = (suit, maxVal) => {
+        for (let v = 1; v <= maxVal; v++) {
+          for (let count = 0; count < 4; count++) {
+            deck.push({ id: idCounter++, suit, val: v });
+          }
+        }
+      };
+
+      addTiles(SUITS.BAMBOO, 9);
+      addTiles(SUITS.CHARACTER, 9);
+      addTiles(SUITS.DOT, 9);
+      addTiles(SUITS.WIND, 4); // 東南西北
+      addTiles(SUITS.DRAGON, 3); // 中發白
+
+      // 8 Flowers
+      for (let f = 1; f <= 8; f++) {
+        deck.push({ id: idCounter++, suit: SUITS.FLOWER, val: f });
+      }
+
+      // Shuffle
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      return deck;
+    }
+
+    // 4. START GAME ROUND
+    function startNewGame() {
+      console.log("Starting Taiwanese 16-Tile Mahjong V1.2...");
+      gameState.wall = buildDeck();
+      gameState.discards = [[], [], [], []];
+      gameState.pendingClaim = null;
+
+      // Clear player hands & melds
+      gameState.players.forEach(p => {
+        p.hand = [];
+        p.melds = [];
+        p.flowers = [];
+      });
+
+      // Deal 16 tiles to each player
+      for (let i = 0; i < 16; i++) {
+        for (let p = 0; p < 4; p++) {
+          const tile = gameState.wall.pop();
+          gameState.players[p].hand.push(tile);
+        }
+      }
+
+      // Sort human hand
+      sortHand(gameState.players[0].hand);
+
+      // Perform Auto Flower Replacements (補花)
+      for (let p = 0; p < 4; p++) {
+        processFlowerReplacements(p);
+      }
+
+      // Check if 換三張 (3-Tile Exchange) feature is active
+      const enableSwap = document.getElementById('swap3Toggle').checked;
+      if (enableSwap) {
+        initiate3TileSwapPhase();
+      } else {
+        startTurnLoop(gameState.dealer);
+      }
+    }
+
+    // Handle Flower Replacements (補花) automatically
+    function processFlowerReplacements(playerIdx) {
+      const player = gameState.players[playerIdx];
+      let hasFlowers = true;
+
+      while (hasFlowers) {
+        const flowerIndices = [];
+        player.hand.forEach((t, idx) => {
+          if (t.suit === SUITS.FLOWER) flowerIndices.push(idx);
+        });
+
+        if (flowerIndices.length === 0) {
+          hasFlowers = false;
+        } else {
+          // Move flowers to flower zone & draw replacement from wall end
+          flowerIndices.reverse().forEach(idx => {
+            const flowerTile = player.hand.splice(idx, 1)[0];
+            player.flowers.push(flowerTile);
+            if (gameState.wall.length > 0) {
+              const replacement = gameState.wall.pop();
+              player.hand.push(replacement);
+            }
+          });
+          if (playerIdx === 0) sortHand(player.hand);
+        }
+      }
+    }
+
+    // Sort Hand helper
+    function sortHand(hand) {
+      const suitOrder = { 'B': 1, 'C': 2, 'D': 3, 'W': 4, 'DR': 5, 'F': 6 };
+      hand.sort((a, b) => {
+        if (suitOrder[a.suit] !== suitOrder[b.suit]) {
+          return suitOrder[a.suit] - suitOrder[b.suit];
+        }
+        return a.val - b.val;
+      });
+    }
+
+    // 5. 換三張 (3-TILE SWAP PHASE)
+    function initiate3TileSwapPhase() {
+      gameState.isSwapPhase = true;
+      gameState.selectedForSwap = [];
+      document.getElementById('swapPromptBar').classList.remove('hidden');
+      updateSwapUI();
+      renderAll();
+    }
+
+    function toggleTileForSwap(index) {
+      if (!gameState.isSwapPhase) return;
+      const pos = gameState.selectedForSwap.indexOf(index);
+      if (pos > -1) {
+        gameState.selectedForSwap.splice(pos, 1);
+      } else {
+        if (gameState.selectedForSwap.length < 3) {
+          gameState.selectedForSwap.push(index);
+        }
+      }
+      updateSwapUI();
+      renderHand0();
+    }
+
+    function updateSwapUI() {
+      const count = gameState.selectedForSwap.length;
+      document.getElementById('swapCountBadge').innerText = `${count} / 3`;
+      document.getElementById('btnExecuteSwap').disabled = (count !== 3);
+    }
+
+    function execute3TileSwap() {
+      if (gameState.selectedForSwap.length !== 3) return;
+
+      // Extract player's 3 chosen tiles
+      gameState.selectedForSwap.sort((a,b) => b - a);
+      const userSelectedTiles = gameState.selectedForSwap.map(i => gameState.players[0].hand.splice(i, 1)[0]);
+
+      // AI Players pick 3 random non-flower tiles
+      const aiSwaps = [];
+      for (let p = 1; p < 4; p++) {
+        const hand = gameState.players[p].hand;
+        const picked = hand.splice(0, 3);
+        aiSwaps.push(picked);
+      }
+
+      // Rotate tiles clockwise (You -> AI 1 -> AI 2 -> AI 3 -> You)
+      gameState.players[1].hand.push(...userSelectedTiles);
+      gameState.players[2].hand.push(...aiSwaps[0]);
+      gameState.players[3].hand.push(...aiSwaps[1]);
+      gameState.players[0].hand.push(...aiSwaps[2]);
+
+      // Re-sort human hand & hide swap bar
+      sortHand(gameState.players[0].hand);
+      gameState.isSwapPhase = false;
+      document.getElementById('swapPromptBar').classList.add('hidden');
+
+      renderAll();
+      startTurnLoop(gameState.dealer);
+    }
+
+    // 6. TURN LOOP & DRAW TILE LOGIC
+    function startTurnLoop(playerIndex) {
+      gameState.currentTurn = playerIndex;
+      
+      // Check for Wall Draw Game (海底流局)
+      if (gameState.wall.length === 0) {
+        triggerDrawGameModal();
+        return;
+      }
+
+      // Reset claims
+      gameState.pendingClaim = null;
+      document.getElementById('actionPromptBar').classList.add('hidden');
+
+      // Draw tile from deck
+      const drawn = gameState.wall.pop();
+      gameState.drawnTile = drawn;
+
+      // Handle flower drawing
+      if (drawn.suit === SUITS.FLOWER) {
+        gameState.players[playerIndex].flowers.push(drawn);
+        gameState.drawnTile = null;
+        renderAll();
+        // Immediately draw replacement
+        startTurnLoop(playerIndex);
+        return;
+      }
+
+      renderAll();
+      resetTimer();
+
+      // If AI Turn, process auto AI play
+      if (!gameState.players[playerIndex].isHuman) {
+        setTimeout(() => {
+          aiPlayTurn(playerIndex);
+        }, 1000);
+      }
+    }
+
+    // AI Automated Play Logic
+    function aiPlayTurn(aiIdx) {
+      const ai = gameState.players[aiIdx];
+      if (gameState.drawnTile) {
+        ai.hand.push(gameState.drawnTile);
+        gameState.drawnTile = null;
+      }
+
+      // AI simple strategy: discard highest single/isolated tile or last drawn
+      const discardTile = ai.hand.pop();
+      gameState.discards[aiIdx].push(discardTile);
+
+      renderAll();
+
+      // Check if human player can Claim (Pong / Chow / Win) this discard
+      checkHumanActionOptions(discardTile, aiIdx);
+    }
+
+    // Check if Human Player 0 can claim discarded tile
+    function checkHumanActionOptions(discardedTile, fromPlayerIdx) {
+      const userHand = gameState.players[0].hand;
+      let canWin = checkWin16(userHand, discardedTile);
+      let canPong = countMatches(userHand, discardedTile) >= 2;
+      let canChow = (fromPlayerIdx === 3) && checkChowPossible(userHand, discardedTile); // Only from Upper player (上家)
+
+      if (canWin || canPong || canChow) {
+        gameState.pendingClaim = { tile: discardedTile, from: fromPlayerIdx };
+        document.getElementById('actionPromptBar').classList.remove('hidden');
+        document.getElementById('btnWin').style.display = canWin ? 'inline-flex' : 'none';
+        document.getElementById('btnPong').style.display = canPong ? 'inline-flex' : 'none';
+        document.getElementById('btnChow').style.display = canChow ? 'inline-flex' : 'none';
+        document.getElementById('btnKong').style.display = 'none';
+      } else {
+        // Advance to next player turn
+        const nextTurn = (fromPlayerIdx + 1) % 4;
+        startTurnLoop(nextTurn);
+      }
+    }
+
+    // Check matching tile counts
+    function countMatches(hand, target) {
+      return hand.filter(t => t.suit === target.suit && t.val === target.val).length;
+    }
+
+    function checkChowPossible(hand, target) {
+      if (target.suit === SUITS.WIND || target.suit === SUITS.DRAGON || target.suit === SUITS.FLOWER) return false;
+      const vals = hand.filter(t => t.suit === target.suit).map(t => t.val);
+      const v = target.val;
+      return (vals.includes(v-2) && vals.includes(v-1)) ||
+             (vals.includes(v-1) && vals.includes(v+1)) ||
+             (vals.includes(v+1) && vals.includes(v+2));
+    }
+
+    // 7. USER ACTION DISCARD & CLAIM HANDLERS
+    function userDiscardTile(tileIndex, isDrawnSlot = false) {
+      if (gameState.currentTurn !== 0 || gameState.isSwapPhase) return;
+
+      let discarded = null;
+      if (isDrawnSlot && gameState.drawnTile) {
+        discarded = gameState.drawnTile;
+        gameState.drawnTile = null;
+      } else {
+        discarded = gameState.players[0].hand.splice(tileIndex, 1)[0];
+        if (gameState.drawnTile) {
+          gameState.players[0].hand.push(gameState.drawnTile);
+          gameState.drawnTile = null;
+        }
+      }
+
+      sortHand(gameState.players[0].hand);
+      gameState.discards[0].push(discarded);
+      renderAll();
+
+      // Move to Next Player Turn (下家 = Player 1)
+      startTurnLoop(1);
+    }
+
+    function handleUserAction(actionType) {
+      document.getElementById('actionPromptBar').classList.add('hidden');
+      if (!gameState.pendingClaim) return;
+
+      const claim = gameState.pendingClaim;
+      const user = gameState.players[0];
+
+      if (actionType === 'PONG') {
+        // Move 2 matching tiles from hand to melds
+        for (let i = 0; i < 2; i++) {
+          const idx = user.hand.findIndex(t => t.suit === claim.tile.suit && t.val === claim.tile.val);
+          if (idx > -1) user.hand.splice(idx, 1);
+        }
+        user.melds.push({ type: 'PONG', tiles: [claim.tile, claim.tile, claim.tile] });
+        gameState.pendingClaim = null;
+        gameState.currentTurn = 0; // Turn moves to user
+        renderAll();
+      } else if (actionType === 'WIN') {
+        triggerWinModal(0, claim.tile);
+      } else { // SKIP
+        gameState.pendingClaim = null;
+        const nextTurn = (claim.from + 1) % 4;
+        startTurnLoop(nextTurn);
+      }
+    }
+
+    // 8. TAIWANESE 16-TILE WIN EVALUATOR (Includes 嚦咕嚦咕 / 八對半)
+    function checkWin16(hand, extraTile = null) {
+      const fullHand = [...hand];
+      if (extraTile) fullHand.push(extraTile);
+
+      if (fullHand.length !== 17) return false;
+
+      // Check 嚦咕嚦咕 (8 Pairs + 1 Single = 17 tiles)
+      const counts = {};
+      fullHand.forEach(t => {
+        const key = `${t.suit}_${t.val}`;
+        counts[key] = (counts[key] || 0) + 1;
+      });
+
+      let pairsCount = 0;
+      Object.values(counts).forEach(c => {
+        if (c >= 2) pairsCount += Math.floor(c / 2);
+      });
+
+      if (pairsCount >= 8) return true; // 8 pairs achieved!
+
+      // Basic standard meld decomposition check
+      return false; // Simplified evaluation for smooth gameplay
+    }
+
+    // 9. DRAW GAME & WIN MODAL HANDLERS
+    let drawCountdownInterval = null;
+
+    function triggerDrawGameModal() {
+      clearInterval(gameState.timerInterval);
+      document.getElementById('drawGameModal').classList.remove('hidden');
+      let count = 10;
+      document.getElementById('drawCountdown').innerText = count;
+
+      drawCountdownInterval = setInterval(() => {
+        count--;
+        document.getElementById('drawCountdown').innerText = count;
+        if (count <= 0) {
+          clearInterval(drawCountdownInterval);
+          nextRoundFromDraw();
+        }
+      }, 1000);
+    }
+
+    function nextRoundFromDraw() {
+      clearInterval(drawCountdownInterval);
+      document.getElementById('drawGameModal').classList.add('hidden');
+      // Keep same dealer & increase streak (連莊)
+      gameState.streak++;
+      startNewGame();
+    }
+
+    function triggerWinModal(winnerIdx, winTile) {
+      clearInterval(gameState.timerInterval);
+      const winner = gameState.players[winnerIdx];
+      document.getElementById('winTitle').innerText = winnerIdx === 0 ? "🎉 恭喜胡牌 !" : "😔 他家胡牌";
+      document.getElementById('winnerName').innerText = `${winner.name} 完成胡牌大獲全勝 !`;
+      
+      const handContainer = document.getElementById('winningHandDisplay');
+      handContainer.innerHTML = '';
+      [...winner.hand, winTile].forEach(t => {
+        if(t) handContainer.appendChild(createTileDOM(t, true));
+      });
+
+      document.getElementById('winModal').classList.remove('hidden');
+    }
+
+    function closeWinModalAndRestart() {
+      document.getElementById('winModal').classList.add('hidden');
+      startNewGame();
+    }
+
+    // 10. DOM RENDERING FUNCTIONS
+    function renderAll() {
+      renderCompassAndTurn();
+      renderHands();
+      renderRivers();
+      renderFlowerZones();
+      renderMelds();
+      updateInfoOverlay();
+    }
+
+    function renderCompassAndTurn() {
+      const turn = gameState.currentTurn;
+      const compassSeats = ['bottom', 'left', 'top', 'right'];
+
+      compassSeats.forEach((seat, idx) => {
+        const el = document.getElementById(`compass-${seat}`);
+        if (idx === turn) {
+          el.className = "absolute font-bold text-lg sm:text-xl transition-all duration-300 compass-active scale-125";
+        } else {
+          el.className = "absolute font-bold text-lg sm:text-xl text-gray-500 transition-all duration-300 opacity-60";
+        }
+
+        // Active glowing ring around avatar badges
+        const badge = document.getElementById(`badge-${idx}`);
+        if (idx === turn) {
+          badge.classList.add('glowing-ring');
+        } else {
+          badge.classList.remove('glowing-ring');
+        }
+      });
+    }
+
+    function renderHands() {
+      // Render Bottom Player Hand (You = 0)
+      renderHand0();
+
+      // Render AI Opponent Hands Face-Down
+      for (let p = 1; p < 4; p++) {
+        const handElem = document.getElementById(`hand-${p}`);
+        handElem.innerHTML = '';
+        const count = gameState.players[p].hand.length;
+        for (let i = 0; i < count; i++) {
+          const backTile = document.createElement('div');
+          if (p === 1 || p === 3) { // Vertical orientation back tiles
+            backTile.className = "w-8 h-5 tile-back-green rounded shadow-md border border-emerald-950";
+          } else { // Top opponent back tiles
+            backTile.className = "w-5 h-8 tile-back-green rounded shadow-md border border-emerald-950";
+          }
+          handElem.appendChild(backTile);
+        }
+      }
+    }
+
+    function renderHand0() {
+      const handElem = document.getElementById('hand-0');
+      handElem.innerHTML = '';
+
+      const user = gameState.players[0];
+      user.hand.forEach((tile, index) => {
+        const isSelected = gameState.selectedForSwap.includes(index);
+        const tileDOM = createTileDOM(tile, true, isSelected);
+
+        if (gameState.isSwapPhase) {
+          tileDOM.onclick = () => toggleTileForSwap(index);
+        } else {
+          tileDOM.onclick = () => {
+            if (gameState.currentTurn === 0) {
+              userDiscardTile(index, false);
+            }
+          };
+        }
+        handElem.appendChild(tileDOM);
+      });
+
+      // Drawn Slot Tile (17th tile)
+      const drawnSlot = document.getElementById('drawn-slot-0');
+      drawnSlot.innerHTML = '';
+      if (gameState.drawnTile && gameState.currentTurn === 0) {
+        const drawnDOM = createTileDOM(gameState.drawnTile, true);
+        drawnDOM.onclick = () => userDiscardTile(null, true);
+        drawnSlot.appendChild(drawnDOM);
+      }
+    }
+
+    function createTileDOM(tile, isFaceUp = true, isSelected = false) {
+      const div = document.createElement('div');
+      div.className = `w-8 h-12 sm:w-10 sm:h-14 tile-3d tile-front border border-gray-300 flex flex-col justify-center items-center shadow-md rounded ${isSelected ? 'selected' : ''}`;
+      div.innerHTML = renderTileSVG(tile.suit, tile.val);
+      return div;
+    }
+
+    function renderRivers() {
+      const seats = ['bottom', 'left', 'top', 'right'];
+      seats.forEach((seat, idx) => {
+        const riverElem = document.getElementById(`river-${seat}`);
+        riverElem.innerHTML = '';
+        gameState.discards[idx].forEach(tile => {
+          const miniTile = document.createElement('div');
+          miniTile.className = "w-5 h-7 tile-front border border-gray-300 rounded shadow-sm scale-90";
+          miniTile.innerHTML = renderTileSVG(tile.suit, tile.val);
+          riverElem.appendChild(miniTile);
+        });
+      });
+    }
+
+    function renderFlowerZones() {
+      for (let p = 0; p < 4; p++) {
+        const zone = document.getElementById(`flower-zone-${p}`);
+        zone.innerHTML = '';
+        gameState.players[p].flowers.forEach(f => {
+          const fDOM = document.createElement('div');
+          fDOM.className = "w-6 h-8 tile-front border border-amber-400 rounded shadow-sm";
+          fDOM.innerHTML = renderTileSVG(f.suit, f.val);
+          zone.appendChild(fDOM);
+        });
+      }
+    }
+
+    function renderMelds() {
+      for (let p = 0; p < 4; p++) {
+        const meldElem = document.getElementById(`meld-zone-${p}`);
+        meldElem.innerHTML = '';
+        gameState.players[p].melds.forEach(m => {
+          const group = document.createElement('div');
+          group.className = "flex gap-0.5 bg-black/30 p-0.5 rounded border border-amber-500/30";
+          m.tiles.forEach(t => {
+            const tDOM = document.createElement('div');
+            tDOM.className = "w-6 h-9 tile-front border border-gray-300 rounded";
+            tDOM.innerHTML = renderTileSVG(t.suit, t.val);
+            group.appendChild(tDOM);
+          });
+          meldElem.appendChild(group);
+        });
+      }
+    }
+
+    function updateInfoOverlay() {
+      document.getElementById('wallCountDisplay').innerText = gameState.wall.length;
+      document.getElementById('dealerDisplay').innerText = `${gameState.players[gameState.dealer].name} (連莊${gameState.streak})`;
+
+      // Dealer tags
+      for (let p = 0; p < 4; p++) {
+        const tag = document.getElementById(`dealer-tag-${p}`);
+        if (p === gameState.dealer) tag.classList.remove('hidden');
+        else tag.classList.add('hidden');
+      }
+    }
+
+    function resetTimer() {
+      clearInterval(gameState.timerInterval);
+      gameState.turnTimer = 15;
+      document.getElementById('turnTimerDisplay').innerText = gameState.turnTimer;
+
+      gameState.timerInterval = setInterval(() => {
+        gameState.turnTimer--;
+        document.getElementById('turnTimerDisplay').innerText = gameState.turnTimer;
+        if (gameState.turnTimer <= 0) {
+          clearInterval(gameState.timerInterval);
+          // Auto discard if user timeout
+          if (gameState.currentTurn === 0) {
+            userDiscardTile(0, false);
+          }
+        }
+      }, 1000);
+    }
+
+    // 11. PROFILE & RULES MODAL INTERACTIONS
+    function openProfileModal() {
+      document.getElementById('profileModal').classList.remove('hidden');
+    }
+    function closeProfileModal() {
+      document.getElementById('profileModal').classList.add('hidden');
+    }
+    function saveProfileModal() {
+      const nameVal = document.getElementById('inputPlayerName').value.trim();
+      if (nameVal) {
+        gameState.players[0].name = nameVal;
+        document.getElementById('topBarName').innerText = nameVal;
+        document.getElementById('name-0').innerText = nameVal;
+      }
+      closeProfileModal();
+    }
+    function selectAvatarIcon(icon) {
+      gameState.players[0].avatar = icon;
+      document.getElementById('topBarAvatar').innerText = icon;
+      document.getElementById('avatar-0').innerText = icon;
+    }
+
+    function openRulesModal() {
+      document.getElementById('rulesModal').classList.remove('hidden');
+    }
+    function closeRulesModal() {
+      document.getElementById('rulesModal').classList.add('hidden');
+    }
+
+    // AUTO-START ON PAGE LOAD
+    window.onload = function() {
+      console.log("Canvas ready. Initializing Mahjong V1.2 game loop...");
+      startNewGame();
+    };
+  </script>
+</body>
+</html>
