@@ -774,8 +774,9 @@
       if (
         playerIndex === 0 &&
         checkWin16(
-        gameState.players[0].hand,
-        gameState.drawnTile
+          gameState.players[0].hand,
+          gameState.drawnTile,
+          gameState.players[0].melds.length
         )
       ) {
          
@@ -817,7 +818,7 @@
         ai.hand.push(gameState.drawnTile);
         gameState.drawnTile = null;
         
-        if (checkWin16(ai.hand)) {
+        if (checkWin16(ai.hand, null, ai.melds.length)) {
           
               triggerWinModal(aiIdx, null);
               return;
@@ -838,7 +839,7 @@
     // Check if Human Player 0 can claim discarded tile
     function checkHumanActionOptions(discardedTile, fromPlayerIdx) {
       const userHand = gameState.players[0].hand;
-      let canWin = checkWin16(userHand, discardedTile);
+      let canWin = checkWin16(userHand,discardedTile,gameState.players[0].melds.length);
       let canPong = countMatches(userHand, discardedTile) >= 2;
       let canChow = (fromPlayerIdx === 3) && checkChowPossible(userHand, discardedTile); // Only from Upper player (上家)
 
@@ -1000,17 +1001,17 @@ function checkWin16(hand, extraTile = null) {
     const fullHand = [...hand];
 
     if (extraTile)
-        fullHand.push(extraTile);
-
-    if (fullHand.length !== 17)
-        return false;
-
+      fullHand.push(extraTile);
+     
+    const requiredTiles =
+      17 - (meldCount * 3);
+     
+    if (fullHand.length !== requiredTiles)
+      return false;
+     
     sortHand(fullHand);
-
-    if (checkEightPairs(fullHand))
-        return true;
-
-    return checkStandardWin(fullHand);
+     
+    return checkStandardWin(fullHand, meldCount);
 }
 
 function checkEightPairs(tiles) {
@@ -1036,25 +1037,7 @@ function checkEightPairs(tiles) {
     return pairs >= 8 && singles === 1;
 }
 
-function checkStandardWin(tiles) {
 
-    const counts = buildTileCounts(tiles);
-
-    for (const key in counts) {
-
-        if (counts[key] >= 2) {
-
-            counts[key] -= 2;
-
-            if (canFormMelds(counts))
-                return true;
-
-            counts[key] += 2;
-        }
-    }
-
-    return false;
-}
 
 function buildTileCounts(tiles) {
 
@@ -1069,8 +1052,49 @@ function buildTileCounts(tiles) {
 
     return counts;
 }
+function checkStandardWin(tiles, meldCount = 0) {
 
-function canFormMelds(counts) {
+    const counts = buildTileCounts(tiles);
+
+    const neededMelds = 5 - meldCount;
+
+    for (const pairKey in counts) {
+
+        if (counts[pairKey] < 2)
+            continue;
+
+        const working = { ...counts };
+
+        working[pairKey] -= 2;
+
+        if (
+            canFormMeldsCount(
+                working,
+                neededMelds
+            )
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function canFormMeldsCount(
+    counts,
+    meldsNeeded
+) {
+
+    if (meldsNeeded === 0) {
+
+        for (const key in counts) {
+
+            if (counts[key] > 0)
+                return false;
+        }
+
+        return true;
+    }
 
     let firstKey = null;
 
@@ -1084,29 +1108,50 @@ function canFormMelds(counts) {
     }
 
     if (!firstKey)
-        return true;
+        return false;
 
-    const [suit, valueStr] = firstKey.split('_');
-    const value = parseInt(valueStr);
+    const [suit, valueStr] =
+        firstKey.split('_');
 
+    const value =
+        parseInt(valueStr);
+
+    //
+    // 刻子
+    //
     if (counts[firstKey] >= 3) {
 
         counts[firstKey] -= 3;
 
-        if (canFormMelds(counts))
+        if (
+            canFormMeldsCount(
+                counts,
+                meldsNeeded - 1
+            )
+        ) {
+
+            counts[firstKey] += 3;
+
             return true;
+        }
 
         counts[firstKey] += 3;
     }
 
+    //
+    // 順子
+    //
     if (
-        suit !== SUITS.WIND &&
-        suit !== SUITS.DRAGON &&
-        suit !== SUITS.FLOWER
+        suit !== 'W' &&
+        suit !== 'DR' &&
+        suit !== 'F'
     ) {
 
-        const key2 = `${suit}_${value + 1}`;
-        const key3 = `${suit}_${value + 2}`;
+        const key2 =
+            `${suit}_${value + 1}`;
+
+        const key3 =
+            `${suit}_${value + 2}`;
 
         if (
             counts[key2] > 0 &&
@@ -1117,8 +1162,19 @@ function canFormMelds(counts) {
             counts[key2]--;
             counts[key3]--;
 
-            if (canFormMelds(counts))
+            if (
+                canFormMeldsCount(
+                    counts,
+                    meldsNeeded - 1
+                )
+            ) {
+
+                counts[firstKey]++;
+                counts[key2]++;
+                counts[key3]++;
+
                 return true;
+            }
 
             counts[firstKey]++;
             counts[key2]++;
@@ -1128,6 +1184,7 @@ function canFormMelds(counts) {
 
     return false;
 }
+
 function generateAllTileTypes() {
 
     const list = [];
