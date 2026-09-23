@@ -779,27 +779,17 @@
           gameState.players[0].melds.length
         )
       ) {
-         
         gameState.pendingClaim = {
-        tile: gameState.drawnTile,
-        from: 0,
-        selfDraw: true
+          tile: gameState.drawnTile,
+          from: 0,
+          selfDraw: true
         };
-         
-        document.getElementById('actionPromptBar')
-        .classList.remove('hidden');
-         
-        document.getElementById('btnWin')
-        .style.display = 'inline-flex';
-         
-        document.getElementById('btnPong')
-        .style.display = 'none';
-         
-        document.getElementById('btnChow')
-        .style.display = 'none';
-         
-        document.getElementById('btnKong')
-        .style.display = 'none';
+        
+        document.getElementById('actionPromptBar').classList.remove('hidden');
+        document.getElementById('btnWin').style.display = 'inline-flex';
+        document.getElementById('btnPong').style.display = 'none';
+        document.getElementById('btnChow').style.display = 'none';
+        document.getElementById('btnKong').style.display = 'none';
       }
       resetTimer();
 
@@ -819,11 +809,9 @@
         gameState.drawnTile = null;
         
         if (checkWin16(ai.hand, null, ai.melds.length)) {
-          
-              triggerWinModal(aiIdx, null);
-              return;
+          triggerWinModal(aiIdx, null);
+          return;
         }
-        
       }
 
       // AI simple strategy: discard highest single/isolated tile or last drawn
@@ -839,7 +827,7 @@
     // Check if Human Player 0 can claim discarded tile
     function checkHumanActionOptions(discardedTile, fromPlayerIdx) {
       const userHand = gameState.players[0].hand;
-      let canWin = checkWin16(userHand,discardedTile,gameState.players[0].melds.length);
+      let canWin = checkWin16(userHand, discardedTile, gameState.players[0].melds.length);
       let canPong = countMatches(userHand, discardedTile) >= 2;
       let canChow = (fromPlayerIdx === 3) && checkChowPossible(userHand, discardedTile); // Only from Upper player (上家)
 
@@ -913,15 +901,9 @@
         gameState.currentTurn = 0; // Turn moves to user
         renderAll();
       } else if (actionType === 'CHOW') {
-
           performChow(claim);
-
       } else if (actionType === 'WIN') {
-        const winTile =
-          claim.selfDraw
-            ? gameState.drawnTile
-            : claim.tile;
-         
+        const winTile = claim.selfDraw ? gameState.drawnTile : claim.tile;
         triggerWinModal(0, winTile);
       } else { // SKIP
         gameState.pendingClaim = null;
@@ -930,297 +912,185 @@
       }
     }
 
-function performChow(claim) {
+    function performChow(claim) {
+      const user = gameState.players[0];
+      const suit = claim.tile.suit;
+      const v = claim.tile.val;
 
-    const user = gameState.players[0];
+      const patterns = [
+          [v - 2, v - 1],
+          [v - 1, v + 1],
+          [v + 1, v + 2]
+      ];
 
-    const suit = claim.tile.suit;
-    const v = claim.tile.val;
+      for (const p of patterns) {
+          const idx1 = user.hand.findIndex(t => t.suit === suit && t.val === p[0]);
+          const idx2 = user.hand.findIndex((t, i) => i !== idx1 && t.suit === suit && t.val === p[1]);
 
-    const patterns = [
-        [v - 2, v - 1],
-        [v - 1, v + 1],
-        [v + 1, v + 2]
-    ];
+          if (idx1 >= 0 && idx2 >= 0) {
+              const tiles = [];
+              tiles.push(user.hand[idx1]);
+              tiles.push(user.hand[idx2]);
 
-    for (const p of patterns) {
+              if (idx1 > idx2) {
+                  user.hand.splice(idx1, 1);
+                  user.hand.splice(idx2, 1);
+              } else {
+                  user.hand.splice(idx2, 1);
+                  user.hand.splice(idx1, 1);
+              }
 
-        const idx1 = user.hand.findIndex(
-            t => t.suit === suit && t.val === p[0]
-        );
+              tiles.push(claim.tile);
+              sortHand(tiles);
 
-        const idx2 = user.hand.findIndex(
-            (t, i) =>
-                i !== idx1 &&
-                t.suit === suit &&
-                t.val === p[1]
-        );
+              user.melds.push({
+                  type: 'CHOW',
+                  tiles: tiles
+              });
 
-        if (idx1 >= 0 && idx2 >= 0) {
-
-            const tiles = [];
-
-            tiles.push(user.hand[idx1]);
-            tiles.push(user.hand[idx2]);
-
-            if (idx1 > idx2) {
-
-                user.hand.splice(idx1, 1);
-                user.hand.splice(idx2, 1);
-
-            } else {
-
-                user.hand.splice(idx2, 1);
-                user.hand.splice(idx1, 1);
-            }
-
-            tiles.push(claim.tile);
-
-            sortHand(tiles);
-
-            user.melds.push({
-                type: 'CHOW',
-                tiles: tiles
-            });
-
-            gameState.pendingClaim = null;
-
-            gameState.currentTurn = 0;
-
-            renderAll();
-
-            return;
-        }
+              gameState.pendingClaim = null;
+              gameState.currentTurn = 0;
+              renderAll();
+              return;
+          }
+      }
     }
-}
 
-    
     // 8. TAIWANESE 16-TILE WIN EVALUATOR (Includes 嚦咕嚦咕 / 八對半)
-function checkWin16(hand, extraTile = null, meldCount = 0) {
+    function checkWin16(hand, extraTile = null, meldCount = 0) {
+        const fullHand = [...hand];
+        if (extraTile) fullHand.push(extraTile);
+        
+        const requiredTiles = 17 - (meldCount * 3);
+        if (fullHand.length !== requiredTiles) return false;
+        
+        sortHand(fullHand);
+        
+        // Check 嚦咕嚦咕 (八對半) if no melds are present
+        if (meldCount === 0 && checkEightPairs(fullHand)) return true;
 
-    const fullHand = [...hand];
-
-    if (extraTile)
-      fullHand.push(extraTile);
-     
-    const requiredTiles =
-      17 - (meldCount * 3);
-     
-    if (fullHand.length !== requiredTiles)
-      return false;
-     
-    sortHand(fullHand);
-     
-    return checkStandardWin(fullHand, meldCount);
-}
-
-function checkEightPairs(tiles) {
-
-    const counts = {};
-
-    tiles.forEach(t => {
-        const key = `${t.suit}_${t.val}`;
-        counts[key] = (counts[key] || 0) + 1;
-    });
-
-    let pairs = 0;
-    let singles = 0;
-
-    Object.values(counts).forEach(c => {
-
-        if (c === 1)
-            singles++;
-
-        pairs += Math.floor(c / 2);
-    });
-
-    return pairs >= 8 && singles === 1;
-}
-
-
-
-function buildTileCounts(tiles) {
-
-    const counts = {};
-
-    tiles.forEach(t => {
-
-        const key = `${t.suit}_${t.val}`;
-
-        counts[key] = (counts[key] || 0) + 1;
-    });
-
-    return counts;
-}
-function checkStandardWin(tiles, meldCount = 0) {
-
-    const counts = buildTileCounts(tiles);
-
-    const neededMelds = 5 - meldCount;
-
-    for (const pairKey in counts) {
-
-        if (counts[pairKey] < 2)
-            continue;
-
-        const working = { ...counts };
-
-        working[pairKey] -= 2;
-
-        if (
-            canFormMeldsCount(
-                working,
-                neededMelds
-            )
-        ) {
-            return true;
-        }
+        return checkStandardWin(fullHand, meldCount);
     }
 
-    return false;
-}
+    function checkEightPairs(tiles) {
+        const counts = {};
+        tiles.forEach(t => {
+            const key = `${t.suit}_${t.val}`;
+            counts[key] = (counts[key] || 0) + 1;
+        });
 
-function canFormMeldsCount(
-    counts,
-    meldsNeeded
-) {
+        let pairs = 0;
+        let singles = 0;
 
-    if (meldsNeeded === 0) {
+        Object.values(counts).forEach(c => {
+            if (c === 1) singles++;
+            pairs += Math.floor(c / 2);
+        });
 
-        for (const key in counts) {
-
-            if (counts[key] > 0)
-                return false;
-        }
-
-        return true;
+        return pairs >= 8 && singles === 1;
     }
 
-    let firstKey = null;
-
-    for (const key in counts) {
-
-        if (counts[key] > 0) {
-
-            firstKey = key;
-            break;
-        }
+    function buildTileCounts(tiles) {
+        const counts = {};
+        tiles.forEach(t => {
+            const key = `${t.suit}_${t.val}`;
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        return counts;
     }
 
-    if (!firstKey)
+    function checkStandardWin(tiles, meldCount = 0) {
+        const counts = buildTileCounts(tiles);
+        const neededMelds = 5 - meldCount;
+
+        for (const pairKey in counts) {
+            if (counts[pairKey] < 2) continue;
+
+            const working = { ...counts };
+            working[pairKey] -= 2;
+
+            if (canFormMeldsCount(working, neededMelds)) {
+                return true;
+            }
+        }
         return false;
+    }
 
-    const [suit, valueStr] =
-        firstKey.split('_');
-
-    const value =
-        parseInt(valueStr);
-
-    //
-    // 刻子
-    //
-    if (counts[firstKey] >= 3) {
-
-        counts[firstKey] -= 3;
-
-        if (
-            canFormMeldsCount(
-                counts,
-                meldsNeeded - 1
-            )
-        ) {
-
-            counts[firstKey] += 3;
-
+    function canFormMeldsCount(counts, meldsNeeded) {
+        if (meldsNeeded === 0) {
+            for (const key in counts) {
+                if (counts[key] > 0) return false;
+            }
             return true;
         }
 
-        counts[firstKey] += 3;
-    }
+        let firstKey = null;
+        for (const key in counts) {
+            if (counts[key] > 0) {
+                firstKey = key;
+                break;
+            }
+        }
 
-    //
-    // 順子
-    //
-    if (
-        suit !== 'W' &&
-        suit !== 'DR' &&
-        suit !== 'F'
-    ) {
+        if (!firstKey) return false;
 
-        const key2 =
-            `${suit}_${value + 1}`;
+        const [suit, valueStr] = firstKey.split('_');
+        const value = parseInt(valueStr);
 
-        const key3 =
-            `${suit}_${value + 2}`;
+        // 刻子 (Pung)
+        if (counts[firstKey] >= 3) {
+            counts[firstKey] -= 3;
+            if (canFormMeldsCount(counts, meldsNeeded - 1)) {
+                counts[firstKey] += 3;
+                return true;
+            }
+            counts[firstKey] += 3;
+        }
 
-        if (
-            counts[key2] > 0 &&
-            counts[key3] > 0
-        ) {
+        // 順子 (Chow)
+        if (suit !== 'W' && suit !== 'DR' && suit !== 'F') {
+            const key2 = `${suit}_${value + 1}`;
+            const key3 = `${suit}_${value + 2}`;
 
-            counts[firstKey]--;
-            counts[key2]--;
-            counts[key3]--;
+            if (counts[key2] > 0 && counts[key3] > 0) {
+                counts[firstKey]--;
+                counts[key2]--;
+                counts[key3]--;
 
-            if (
-                canFormMeldsCount(
-                    counts,
-                    meldsNeeded - 1
-                )
-            ) {
-
+                if (canFormMeldsCount(counts, meldsNeeded - 1)) {
+                    counts[firstKey]++;
+                    counts[key2]++;
+                    counts[key3]++;
+                    return true;
+                }
                 counts[firstKey]++;
                 counts[key2]++;
                 counts[key3]++;
-
-                return true;
             }
-
-            counts[firstKey]++;
-            counts[key2]++;
-            counts[key3]++;
         }
+        return false;
     }
 
-    return false;
-}
+    function generateAllTileTypes() {
+        const list = [];
+        for (let i = 1; i <= 9; i++) list.push({ suit: 'B', val: i });
+        for (let i = 1; i <= 9; i++) list.push({ suit: 'C', val: i });
+        for (let i = 1; i <= 9; i++) list.push({ suit: 'D', val: i });
+        for (let i = 1; i <= 4; i++) list.push({ suit: 'W', val: i });
+        for (let i = 1; i <= 3; i++) list.push({ suit: 'DR', val: i });
+        return list;
+    }
 
-function generateAllTileTypes() {
+    function getWaitingTiles(hand, meldCount) {
+        const waits = [];
+        generateAllTileTypes().forEach(tile => {
+            if (checkWin16(hand, tile, meldCount)) {
+                waits.push(tile);
+            }
+        });
+        return waits;
+    }
 
-    const list = [];
-
-    for (let i = 1; i <= 9; i++)
-        list.push({ suit: 'B', val: i });
-
-    for (let i = 1; i <= 9; i++)
-        list.push({ suit: 'C', val: i });
-
-    for (let i = 1; i <= 9; i++)
-        list.push({ suit: 'D', val: i });
-
-    for (let i = 1; i <= 4; i++)
-        list.push({ suit: 'W', val: i });
-
-    for (let i = 1; i <= 3; i++)
-        list.push({ suit: 'DR', val: i });
-
-    return list;
-}
-
-function getWaitingTiles(hand) {
-
-    const waits = [];
-
-    generateAllTileTypes().forEach(tile => {
-
-        if (checkWin16(hand, tile, meldCount)) {
-
-            waits.push(tile);
-        }
-    });
-
-    return waits;
-}
     // 9. DRAW GAME & WIN MODAL HANDLERS
     let drawCountdownInterval = null;
 
@@ -1278,20 +1148,16 @@ function getWaitingTiles(hand) {
       updateInfoOverlay();
 
       // 聽牌偵測
-      /*const waiting = getWaitingTiles(
+      const waiting = getWaitingTiles(
         gameState.players[0].hand,
         gameState.players[0].melds.length
       );
-      */ 
+      
       if (waiting.length > 0) {
-       
         console.log(
           "聽牌:",
-          waiting
-            .map(t => `${t.suit}${t.val}`)
-            .join(',')
+          waiting.map(t => `${t.suit}${t.val}`).join(',')
         );
-         
       }
     }
 
