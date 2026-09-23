@@ -996,7 +996,7 @@ function performChow(claim) {
 
     
     // 8. TAIWANESE 16-TILE WIN EVALUATOR (Includes 嚦咕嚦咕 / 八對半)
-function checkWin16(hand, extraTile = null) {
+function checkWin16(hand, extraTile = null, meldCount = 0) {
 
     const fullHand = [...hand];
 
@@ -1213,7 +1213,7 @@ function getWaitingTiles(hand) {
 
     generateAllTileTypes().forEach(tile => {
 
-        if (checkWin16(hand, tile)) {
+        if (checkWin16(hand, tile, meldCount)) {
 
             waits.push(tile);
         }
@@ -1278,10 +1278,11 @@ function getWaitingTiles(hand) {
       updateInfoOverlay();
 
       // 聽牌偵測
-      const waiting = getWaitingTiles(
-        gameState.players[0].hand
+      /*const waiting = getWaitingTiles(
+        gameState.players[0].hand,
+        gameState.players[0].melds.length
       );
-       
+      */ 
       if (waiting.length > 0) {
        
         console.log(
