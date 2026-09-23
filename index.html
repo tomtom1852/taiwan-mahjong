@@ -771,6 +771,35 @@
       }
 
       renderAll();
+      if (
+        playerIndex === 0 &&
+        checkWin16(
+        gameState.players[0].hand,
+        gameState.drawnTile
+        )
+      ) {
+         
+        gameState.pendingClaim = {
+        tile: gameState.drawnTile,
+        from: 0,
+        selfDraw: true
+        };
+         
+        document.getElementById('actionPromptBar')
+        .classList.remove('hidden');
+         
+        document.getElementById('btnWin')
+        .style.display = 'inline-flex';
+         
+        document.getElementById('btnPong')
+        .style.display = 'none';
+         
+        document.getElementById('btnChow')
+        .style.display = 'none';
+         
+        document.getElementById('btnKong')
+        .style.display = 'none';
+      }
       resetTimer();
 
       // If AI Turn, process auto AI play
@@ -787,6 +816,13 @@
       if (gameState.drawnTile) {
         ai.hand.push(gameState.drawnTile);
         gameState.drawnTile = null;
+        
+        if (checkWin16(ai.hand)) {
+          
+              triggerWinModal(aiIdx, null);
+              return;
+        }
+        
       }
 
       // AI simple strategy: discard highest single/isolated tile or last drawn
@@ -875,8 +911,17 @@
         gameState.pendingClaim = null;
         gameState.currentTurn = 0; // Turn moves to user
         renderAll();
+      } else if (actionType === 'CHOW') {
+
+          performChow(claim);
+
       } else if (actionType === 'WIN') {
-        triggerWinModal(0, claim.tile);
+        const winTile =
+          claim.selfDraw
+            ? gameState.drawnTile
+            : claim.tile;
+         
+        triggerWinModal(0, winTile);
       } else { // SKIP
         gameState.pendingClaim = null;
         const nextTurn = (claim.from + 1) % 4;
@@ -884,31 +929,241 @@
       }
     }
 
+function performChow(claim) {
+
+    const user = gameState.players[0];
+
+    const suit = claim.tile.suit;
+    const v = claim.tile.val;
+
+    const patterns = [
+        [v - 2, v - 1],
+        [v - 1, v + 1],
+        [v + 1, v + 2]
+    ];
+
+    for (const p of patterns) {
+
+        const idx1 = user.hand.findIndex(
+            t => t.suit === suit && t.val === p[0]
+        );
+
+        const idx2 = user.hand.findIndex(
+            (t, i) =>
+                i !== idx1 &&
+                t.suit === suit &&
+                t.val === p[1]
+        );
+
+        if (idx1 >= 0 && idx2 >= 0) {
+
+            const tiles = [];
+
+            tiles.push(user.hand[idx1]);
+            tiles.push(user.hand[idx2]);
+
+            if (idx1 > idx2) {
+
+                user.hand.splice(idx1, 1);
+                user.hand.splice(idx2, 1);
+
+            } else {
+
+                user.hand.splice(idx2, 1);
+                user.hand.splice(idx1, 1);
+            }
+
+            tiles.push(claim.tile);
+
+            sortHand(tiles);
+
+            user.melds.push({
+                type: 'CHOW',
+                tiles: tiles
+            });
+
+            gameState.pendingClaim = null;
+
+            gameState.currentTurn = 0;
+
+            renderAll();
+
+            return;
+        }
+    }
+}
+
+    
     // 8. TAIWANESE 16-TILE WIN EVALUATOR (Includes 嚦咕嚦咕 / 八對半)
-    function checkWin16(hand, extraTile = null) {
-      const fullHand = [...hand];
-      if (extraTile) fullHand.push(extraTile);
+function checkWin16(hand, extraTile = null) {
 
-      if (fullHand.length !== 17) return false;
+    const fullHand = [...hand];
 
-      // Check 嚦咕嚦咕 (8 Pairs + 1 Single = 17 tiles)
-      const counts = {};
-      fullHand.forEach(t => {
+    if (extraTile)
+        fullHand.push(extraTile);
+
+    if (fullHand.length !== 17)
+        return false;
+
+    sortHand(fullHand);
+
+    if (checkEightPairs(fullHand))
+        return true;
+
+    return checkStandardWin(fullHand);
+}
+
+function checkEightPairs(tiles) {
+
+    const counts = {};
+
+    tiles.forEach(t => {
         const key = `${t.suit}_${t.val}`;
         counts[key] = (counts[key] || 0) + 1;
-      });
+    });
 
-      let pairsCount = 0;
-      Object.values(counts).forEach(c => {
-        if (c >= 2) pairsCount += Math.floor(c / 2);
-      });
+    let pairs = 0;
+    let singles = 0;
 
-      if (pairsCount >= 8) return true; // 8 pairs achieved!
+    Object.values(counts).forEach(c => {
 
-      // Basic standard meld decomposition check
-      return false; // Simplified evaluation for smooth gameplay
+        if (c === 1)
+            singles++;
+
+        pairs += Math.floor(c / 2);
+    });
+
+    return pairs >= 8 && singles === 1;
+}
+
+function checkStandardWin(tiles) {
+
+    const counts = buildTileCounts(tiles);
+
+    for (const key in counts) {
+
+        if (counts[key] >= 2) {
+
+            counts[key] -= 2;
+
+            if (canFormMelds(counts))
+                return true;
+
+            counts[key] += 2;
+        }
     }
 
+    return false;
+}
+
+function buildTileCounts(tiles) {
+
+    const counts = {};
+
+    tiles.forEach(t => {
+
+        const key = `${t.suit}_${t.val}`;
+
+        counts[key] = (counts[key] || 0) + 1;
+    });
+
+    return counts;
+}
+
+function canFormMelds(counts) {
+
+    let firstKey = null;
+
+    for (const key in counts) {
+
+        if (counts[key] > 0) {
+
+            firstKey = key;
+            break;
+        }
+    }
+
+    if (!firstKey)
+        return true;
+
+    const [suit, valueStr] = firstKey.split('_');
+    const value = parseInt(valueStr);
+
+    if (counts[firstKey] >= 3) {
+
+        counts[firstKey] -= 3;
+
+        if (canFormMelds(counts))
+            return true;
+
+        counts[firstKey] += 3;
+    }
+
+    if (
+        suit !== SUITS.WIND &&
+        suit !== SUITS.DRAGON &&
+        suit !== SUITS.FLOWER
+    ) {
+
+        const key2 = `${suit}_${value + 1}`;
+        const key3 = `${suit}_${value + 2}`;
+
+        if (
+            counts[key2] > 0 &&
+            counts[key3] > 0
+        ) {
+
+            counts[firstKey]--;
+            counts[key2]--;
+            counts[key3]--;
+
+            if (canFormMelds(counts))
+                return true;
+
+            counts[firstKey]++;
+            counts[key2]++;
+            counts[key3]++;
+        }
+    }
+
+    return false;
+}
+function generateAllTileTypes() {
+
+    const list = [];
+
+    for (let i = 1; i <= 9; i++)
+        list.push({ suit: 'B', val: i });
+
+    for (let i = 1; i <= 9; i++)
+        list.push({ suit: 'C', val: i });
+
+    for (let i = 1; i <= 9; i++)
+        list.push({ suit: 'D', val: i });
+
+    for (let i = 1; i <= 4; i++)
+        list.push({ suit: 'W', val: i });
+
+    for (let i = 1; i <= 3; i++)
+        list.push({ suit: 'DR', val: i });
+
+    return list;
+}
+
+function getWaitingTiles(hand) {
+
+    const waits = [];
+
+    generateAllTileTypes().forEach(tile => {
+
+        if (checkWin16(hand, tile)) {
+
+            waits.push(tile);
+        }
+    });
+
+    return waits;
+}
     // 9. DRAW GAME & WIN MODAL HANDLERS
     let drawCountdownInterval = null;
 
@@ -964,6 +1219,22 @@
       renderFlowerZones();
       renderMelds();
       updateInfoOverlay();
+
+      // 聽牌偵測
+      const waiting = getWaitingTiles(
+        gameState.players[0].hand
+      );
+       
+      if (waiting.length > 0) {
+       
+        console.log(
+          "聽牌:",
+          waiting
+            .map(t => `${t.suit}${t.val}`)
+            .join(',')
+        );
+         
+      }
     }
 
     function renderCompassAndTurn() {
